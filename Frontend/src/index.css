@@ -1,0 +1,116 @@
+/* ══════════════════════════════════════════════════════
+   DESIGN TOKENS  — light (default)
+══════════════════════════════════════════════════════ */
+:root {
+  --text:         #5c5566;
+  --text-h:       #0d0b14;
+  --bg:           #ffffff;
+  --bg-2:         #f7f6fb;
+  --border:       #e8e6ec;
+  --code-bg:      #f3f2ea;
+  --accent:       #8b5cf6;
+  --accent-2:     #a78bfa;
+  --accent-bg:    rgba(139, 92, 246, 0.08);
+  --accent-border:rgba(139, 92, 246, 0.3);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05);
+  --shadow-lg:    0 10px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+
+  --sans:    'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono:    ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  font: 16px/1.5 var(--sans);
+  letter-spacing: 0.01em;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Dark via system preference (only when not overridden) ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --text:         #9ca3af;
+    --text-h:       #f1f0f5;
+    --bg:           #13141c;
+    --bg-2:         #1a1b26;
+    --border:       #272836;
+    --code-bg:      #1e1f2a;
+    --accent:       #a78bfa;
+    --accent-2:     #c4b5fd;
+    --accent-bg:    rgba(167, 139, 250, 0.12);
+    --accent-border:rgba(167, 139, 250, 0.35);
+    --shadow-sm:    0 1px 3px rgba(0,0,0,0.3),  0 1px 2px rgba(0,0,0,0.2);
+    --shadow-md:    0 4px 16px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.25);
+    --shadow-lg:    0 10px 40px rgba(0,0,0,0.5),0 4px 12px rgba(0,0,0,0.3);
+    color-scheme: dark;
+  }
+}
+
+/* ── Explicit dark override ── */
+:root[data-theme="dark"] {
+  --text:         #9ca3af;
+  --text-h:       #f1f0f5;
+  --bg:           #13141c;
+  --bg-2:         #1a1b26;
+  --border:       #272836;
+  --code-bg:      #1e1f2a;
+  --accent:       #a78bfa;
+  --accent-2:     #c4b5fd;
+  --accent-bg:    rgba(167, 139, 250, 0.12);
+  --accent-border:rgba(167, 139, 250, 0.35);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.3),  0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.25);
+  --shadow-lg:    0 10px 40px rgba(0,0,0,0.5),0 4px 12px rgba(0,0,0,0.3);
+  color-scheme: dark;
+}
+
+/* ── Explicit light override ── */
+:root[data-theme="light"] {
+  --text:         #5c5566;
+  --text-h:       #0d0b14;
+  --bg:           #ffffff;
+  --bg-2:         #f7f6fb;
+  --border:       #e8e6ec;
+  --code-bg:      #f3f2ea;
+  --accent:       #8b5cf6;
+  --accent-2:     #a78bfa;
+  --accent-bg:    rgba(139, 92, 246, 0.08);
+  --accent-border:rgba(139, 92, 246, 0.3);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05);
+  --shadow-lg:    0 10px 40px rgba(0,0,0,0.12),0 4px 12px rgba(0,0,0,0.06);
+  color-scheme: light;
+}
+
+/* ══════════════════════════════════════════════════════
+   GLOBAL RESET & BASE
+══════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  transition: background-color 0.3s ease, color 0.2s ease;
+}
+
+#root {
+  width: 100%;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+p { margin: 0; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--text-h);
+}
