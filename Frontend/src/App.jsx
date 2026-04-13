@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
+import { api } from './api'
 import Sidebar       from './components/Sidebar'
+import AuthPage      from './components/AuthPage'
 import SettingsModal from './components/SettingsModal'
 import HelpModal     from './components/HelpModal'
 import ProjectModal  from './components/ProjectModal'
@@ -15,10 +17,6 @@ function useTheme() {
     localStorage.setItem('chat-theme', theme)
   }, [theme])
   return [theme, setTheme]
-}
-
-function newSession(projectId = null) {
-  return { id: crypto.randomUUID(), title: 'New Chat', messages: [], projectId }
 }
 
 /* ── Message renderer (handles ``` code blocks) ─────── */
@@ -52,32 +50,28 @@ function BubbleCursor({ containerRef }) {
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-
     let last = 0
     function onMove(e) {
       const now = Date.now()
-      if (now - last < 38) return
+      if (now - last < 80) return
       last = now
-
-      const b = document.createElement('div')
+      const b    = document.createElement('div')
       b.className = 'cursor-bubble'
       const size = 9 + Math.random() * 24
       const hue  = 248 + Math.random() * 48
-      const lit  = 54 + Math.random() * 22
+      const lit  = 54  + Math.random() * 22
       const alph = 0.13 + Math.random() * 0.28
       const dur  = (0.85 + Math.random() * 0.9).toFixed(2)
       b.style.cssText = `left:${e.clientX}px;top:${e.clientY}px;width:${size}px;height:${size}px;background:hsla(${hue},65%,${lit}%,${alph});animation-duration:${dur}s`
       document.body.appendChild(b)
       b.addEventListener('animationend', () => b.remove(), { once: true })
     }
-
     el.addEventListener('mousemove', onMove)
     return () => {
       el.removeEventListener('mousemove', onMove)
       document.querySelectorAll('.cursor-bubble').forEach(b => b.remove())
     }
   }, [containerRef])
-
   return null
 }
 
@@ -87,30 +81,28 @@ function BubbleCursor({ containerRef }) {
 export default function App() {
   const [theme, setTheme] = useTheme()
 
-  const [sessions, setSessions] = useState(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem('chat-sessions') || '[]')
-      return s.length > 0 ? s : [newSession()]
-    } catch { return [newSession()] }
+  /* ── Auth state ────────────────────────────────────── */
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('chat-user') || 'null') }
+    catch { return null }
   })
 
-  const [projects, setProjects] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('chat-projects') || '[]') }
-    catch { return [] }
-  })
+  /* ── Data state (loaded from backend) ─────────────── */
+  const [sessions,        setSessions]        = useState([])   // [{ id, title, projectId }]
+  const [projects,        setProjects]        = useState([])   // [{ id, name, color, sharedContext, collapsed }]
+  const [messages,        setMessages]        = useState([])   // active session messages
+  const [activeId,        setActiveId]        = useState(null)
+  const [dataLoading,     setDataLoading]     = useState(false)
+  const [messagesLoading, setMessagesLoading] = useState(false)
 
-  const [activeId, setActiveId] = useState(() =>
-    localStorage.getItem('chat-active-id') || ''
-  )
-
-  const [input, setInput]         = useState('')
-  const [loading, setLoading]     = useState(false)
+  /* ── UI state ──────────────────────────────────────── */
+  const [input,       setInput]       = useState('')
+  const [loading,     setLoading]     = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [attached, setAttached]   = useState(null)   // { name, content }
-  const [toast, setToast]         = useState(null)
-  const [chatModel, setChatModel] = useState(() => localStorage.getItem('chat-model') || 'llama3')
+  const [attached,    setAttached]    = useState(null)
+  const [toast,       setToast]       = useState(null)
+  const [chatModel,   setChatModel]   = useState(() => localStorage.getItem('chat-model') || 'llama3')
 
-  /* Modal / dropdown visibility */
   const [settingsOpen,     setSettingsOpen]     = useState(false)
   const [helpOpen,         setHelpOpen]         = useState(false)
   const [projectModalData, setProjectModalData] = useState(null)
@@ -122,33 +114,79 @@ export default function App() {
   const chatBodyRef    = useRef(null)
   const downloadBtnRef = useRef(null)
 
-  const activeSession = sessions.find(s => s.id === activeId) ?? sessions[0]
-  const messages      = activeSession?.messages ?? []
-  const isEmpty       = messages.length === 0
-  const canSend       = !loading && (!!input.trim() || !!attached)
+  const activeSession = sessions.find(s => s.id === activeId) ?? null
+  const isEmpty       = messages.length === 0 && !messagesLoading
+  const canSend       = !loading && !messagesLoading && (!!input.trim() || !!attached)
 
-  /* ── Persist state ─────────────────────────────────── */
-  useEffect(() => { localStorage.setItem('chat-sessions',  JSON.stringify(sessions))  }, [sessions])
-  useEffect(() => { localStorage.setItem('chat-projects',  JSON.stringify(projects))  }, [projects])
-  useEffect(() => { localStorage.setItem('chat-active-id', activeId)                  }, [activeId])
+  /* ── Load data when user is set ────────────────────── */
+  useEffect(() => {
+    if (!user) return
+    loadData()
+  }, [user])
 
-  /* Restore font size */
+  async function loadData() {
+    setDataLoading(true)
+    try {
+      const [sessRes, projRes] = await Promise.all([
+        api.getSessions(),
+        api.getProjects(),
+      ])
+      if (!sessRes.ok || !projRes.ok) throw new Error('Failed to load data')
+
+      const sessData = await sessRes.json()
+      const projData = await projRes.json()
+
+      setSessions(sessData)
+      setProjects(projData)
+
+      if (sessData.length > 0) {
+        setActiveId(sessData[0].id)
+      }
+    } catch (err) {
+      showToast('Could not load data. Is the backend running?', 'error')
+    } finally {
+      setDataLoading(false)
+    }
+  }
+
+  /* ── Load messages when active session changes ──────── */
+  useEffect(() => {
+    if (!activeId) { setMessages([]); return }
+    loadMessages(activeId)
+  }, [activeId])
+
+  async function loadMessages(sessionId) {
+    setMessagesLoading(true)
+    setMessages([])
+    try {
+      const res = await api.getMessages(sessionId)
+      if (res.ok) {
+        const msgs = await res.json()
+        setMessages(msgs)
+      }
+    } catch { /* silently fail */ }
+    finally { setMessagesLoading(false) }
+  }
+
+  /* ── Persist preferences ───────────────────────────── */
   useEffect(() => {
     const fs = localStorage.getItem('chat-fontsize') || '15'
     document.documentElement.style.setProperty('--msg-font-size', fs + 'px')
   }, [])
 
-  /* Auto-scroll */
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, loading])
+  /* ── Auto-scroll ───────────────────────────────────── */
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, loading])
 
-  /* Toast auto-dismiss */
+  /* ── Toast auto-dismiss ────────────────────────────── */
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 3000)
     return () => clearTimeout(t)
   }, [toast])
 
-  /* Close download dropdown on outside click */
+  /* ── Close download dropdown on outside click ───────── */
   useEffect(() => {
     if (!downloadOpen) return
     function onOutside(e) {
@@ -159,9 +197,6 @@ export default function App() {
   }, [downloadOpen])
 
   /* ── Helpers ───────────────────────────────────────── */
-  function updateSession(id, fn) {
-    setSessions(prev => prev.map(s => s.id === id ? fn(s) : s))
-  }
   function showToast(msg, type = 'success') { setToast({ msg, type }) }
 
   function autoResize() {
@@ -171,72 +206,121 @@ export default function App() {
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
   }
 
+  /* ── Auth ──────────────────────────────────────────── */
+  function handleAuth(u) { setUser(u) }
+
+  function handleLogout() {
+    localStorage.removeItem('chat-token')
+    localStorage.removeItem('chat-refresh-token')
+    localStorage.removeItem('chat-user')
+    setUser(null)
+    setSessions([]); setProjects([])
+    setMessages([]); setActiveId(null)
+  }
+
   /* ── Session ops ───────────────────────────────────── */
-  function handleNewChat() {
-    const s = newSession()
-    setSessions(prev => [s, ...prev])
-    setActiveId(s.id)
+  async function handleNewChat() {
+    const id = crypto.randomUUID()
+    await api.createSession({ session_id: id, title: 'New Chat' })
+    setSessions(prev => [{ id, title: 'New Chat', projectId: null }, ...prev])
+    setActiveId(id)
+    setMessages([])
     setInput(''); setAttached(null)
   }
+
   function handleSelect(id) {
+    if (id === activeId) return
     setActiveId(id)
     setInput(''); setAttached(null)
   }
-  function handleDelete(id) {
+
+  async function handleDelete(id) {
+    await api.deleteSession(id)
     setSessions(prev => {
       const next = prev.filter(s => s.id !== id)
-      if (next.length === 0) {
-        const s = newSession(); setActiveId(s.id); return [s]
+      if (id === activeId) {
+        if (next.length > 0) setActiveId(next[0].id)
+        else { setActiveId(null); setMessages([]) }
       }
-      if (id === activeId) setActiveId(next[0].id)
       return next
     })
   }
-  function handleRenameSession(id, newTitle) {
-    updateSession(id, s => ({ ...s, title: newTitle }))
+
+  async function handleRenameSession(id, newTitle) {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle } : s))
+    await api.renameSession(id, newTitle)
   }
-  function handleClearAll() {
-    const s = newSession()
-    setSessions([s]); setActiveId(s.id)
-    setInput(''); setAttached(null)
+
+  async function handleClearAll() {
+    await Promise.all(sessions.map(s => api.deleteSession(s.id)))
+    await Promise.all(projects.map(p => api.deleteProject(p.id)))
+    setSessions([]); setProjects([])
+    setMessages([]); setActiveId(null)
     showToast('All conversations cleared')
   }
 
   /* ── Project ops ───────────────────────────────────── */
-  function handleNewProjectChat(projectId) {
-    const s = newSession(projectId)
-    setSessions(prev => [s, ...prev])
-    setActiveId(s.id)
+  async function handleNewProjectChat(projectId) {
+    const id = crypto.randomUUID()
+    await api.createSession({ session_id: id, title: 'New Chat', project_id: projectId })
+    setSessions(prev => [{ id, title: 'New Chat', projectId }, ...prev])
+    setActiveId(id)
+    setMessages([])
     setInput(''); setAttached(null)
   }
-  function handleCreateProject(data) {
-    const proj = { id: crypto.randomUUID(), collapsed: false, ...data }
-    setProjects(prev => [...prev, proj])
-    showToast(`Project "${data.name}" created`)
+
+  async function handleCreateProject(data) {
+    const id = crypto.randomUUID()
+    const res = await api.createProject({
+      project_id:     id,
+      name:           data.name,
+      color:          data.color,
+      shared_context: data.sharedContext || '',
+    })
+    if (res.ok) {
+      const proj = await res.json()
+      setProjects(prev => [...prev, proj])
+      showToast(`Project "${data.name}" created`)
+    }
   }
-  function handleEditProject(id, changes) {
+
+  async function handleEditProject(id, changes) {
     if (changes) {
+      // Inline rename or direct update
       setProjects(prev => prev.map(p => p.id === id ? { ...p, ...changes } : p))
+      await api.updateProject(id, {
+        name:           changes.name,
+        color:          changes.color,
+        shared_context: changes.sharedContext,
+      })
     } else {
+      // Open modal
       const proj = projects.find(p => p.id === id)
       if (proj) setProjectModalData({ mode: 'edit', project: proj })
     }
   }
-  function handleDeleteProject(id) {
+
+  async function handleDeleteProject(id) {
+    await api.deleteProject(id)
     setSessions(prev => {
       const toDelete = new Set(prev.filter(s => s.projectId === id).map(s => s.id))
-      const next = prev.filter(s => !toDelete.has(s.id))
-      if (next.length === 0) {
-        const s = newSession(); setActiveId(s.id); return [s]
+      const next     = prev.filter(s => !toDelete.has(s.id))
+      if (toDelete.has(activeId)) {
+        if (next.length > 0) setActiveId(next[0].id)
+        else { setActiveId(null); setMessages([]) }
       }
-      if (toDelete.has(activeId)) setActiveId(next[0].id)
       return next
     })
     setProjects(prev => prev.filter(p => p.id !== id))
     showToast('Project deleted')
   }
-  function handleToggleProject(id) {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, collapsed: !p.collapsed } : p))
+
+  async function handleToggleProject(id) {
+    const proj = projects.find(p => p.id === id)
+    if (!proj) return
+    const collapsed = !proj.collapsed
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, collapsed } : p))
+    api.updateProject(id, { collapsed })
   }
 
   /* ── Upload ────────────────────────────────────────── */
@@ -274,135 +358,88 @@ export default function App() {
       </div>`
     }).join('')
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${activeSession.title}</title>
-  <style>
-    body { font-family: system-ui, 'Segoe UI', sans-serif; background: ${bg}; color: ${textC}; max-width: 760px; margin: 0 auto; padding: 40px 28px; }
-    h1 { font-size: 20px; font-weight: 700; color: ${textC}; border-bottom: 2px solid ${bubbleU}; padding-bottom: 12px; margin: 0 0 28px; }
-    .meta { font-size: 12px; color: ${textMut}; margin-bottom: 32px; }
-    @media print { body { padding: 20px; } }
-  </style>
-</head>
-<body>
-  <h1>${activeSession.title}</h1>
-  <p class="meta">Exported ${new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })} · ${messages.length} messages</p>
-  ${rows}
-</body>
-</html>`
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>${activeSession?.title ?? 'Chat'}</title>
+<style>body{font-family:system-ui,'Segoe UI',sans-serif;background:${bg};color:${textC};max-width:760px;margin:0 auto;padding:40px 28px;}
+h1{font-size:20px;font-weight:700;border-bottom:2px solid ${bubbleU};padding-bottom:12px;margin:0 0 28px;}
+.meta{font-size:12px;color:${textMut};margin-bottom:32px;}@media print{body{padding:20px;}}</style>
+</head><body>
+<h1>${activeSession?.title ?? 'Chat'}</h1>
+<p class="meta">Exported ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})} · ${messages.length} messages</p>
+${rows}</body></html>`
   }
 
-  /* ── Download as Markdown ──────────────────────────── */
   function handleDownloadMD() {
-    if (!activeSession || messages.length === 0) return
+    if (!messages.length) return
     const body = messages.map(m => `### ${m.role === 'user' ? 'You' : 'AI'}\n\n${m.content}`).join('\n\n---\n\n')
-    const blob = new Blob([`# ${activeSession.title}\n\n${body}`], { type: 'text/markdown' })
+    const blob = new Blob([`# ${activeSession?.title ?? 'Chat'}\n\n${body}`], { type: 'text/markdown' })
     const url  = URL.createObjectURL(blob)
-    Object.assign(document.createElement('a'), {
-      href: url,
-      download: `${activeSession.title.slice(0,40).replace(/[^a-z0-9]/gi,'-')}.md`,
-    }).click()
-    URL.revokeObjectURL(url)
-    showToast('Downloaded as Markdown')
-    setDownloadOpen(false)
+    Object.assign(document.createElement('a'), { href: url, download: `${(activeSession?.title ?? 'chat').slice(0,40).replace(/[^a-z0-9]/gi,'-')}.md` }).click()
+    URL.revokeObjectURL(url); showToast('Downloaded as Markdown'); setDownloadOpen(false)
   }
-
-  /* ── Download as HTML ──────────────────────────────── */
   function handleDownloadHTML() {
-    if (!activeSession || messages.length === 0) return
+    if (!messages.length) return
     const blob = new Blob([buildTranscriptHTML()], { type: 'text/html' })
     const url  = URL.createObjectURL(blob)
-    Object.assign(document.createElement('a'), {
-      href: url,
-      download: `${activeSession.title.slice(0,40).replace(/[^a-z0-9]/gi,'-')}.html`,
-    }).click()
-    URL.revokeObjectURL(url)
-    showToast('Downloaded as HTML')
-    setDownloadOpen(false)
+    Object.assign(document.createElement('a'), { href: url, download: `${(activeSession?.title ?? 'chat').slice(0,40).replace(/[^a-z0-9]/gi,'-')}.html` }).click()
+    URL.revokeObjectURL(url); showToast('Downloaded as HTML'); setDownloadOpen(false)
   }
-
-  /* ── Download as Word Doc ──────────────────────────── */
   function handleDownloadDoc() {
-    if (!activeSession || messages.length === 0) return
+    if (!messages.length) return
     const blob = new Blob([buildTranscriptHTML()], { type: 'application/msword' })
     const url  = URL.createObjectURL(blob)
-    Object.assign(document.createElement('a'), {
-      href: url,
-      download: `${activeSession.title.slice(0,40).replace(/[^a-z0-9]/gi,'-')}.doc`,
-    }).click()
-    URL.revokeObjectURL(url)
-    showToast('Downloaded as Word document')
-    setDownloadOpen(false)
+    Object.assign(document.createElement('a'), { href: url, download: `${(activeSession?.title ?? 'chat').slice(0,40).replace(/[^a-z0-9]/gi,'-')}.doc` }).click()
+    URL.revokeObjectURL(url); showToast('Downloaded as Word document'); setDownloadOpen(false)
   }
-
-  /* ── Print / Save as PDF ───────────────────────────── */
   function handleDownloadPDF() {
-    if (!activeSession || messages.length === 0) return
-    const html = buildTranscriptHTML()
-    const win  = window.open('', '_blank')
+    if (!messages.length) return
+    const win = window.open('', '_blank')
     if (!win) { showToast('Allow pop-ups to save as PDF', 'error'); return }
-    win.document.write(html)
+    win.document.write(buildTranscriptHTML())
     win.document.write(`<script>window.onload=function(){window.print();setTimeout(()=>window.close(),800)}<\/script>`)
     win.document.close()
-    showToast('Print dialog opened — choose "Save as PDF"')
-    setDownloadOpen(false)
+    showToast('Print dialog opened — choose "Save as PDF"'); setDownloadOpen(false)
   }
 
   /* ── Send ──────────────────────────────────────────── */
   async function sendMessage() {
     const text = input.trim()
-    if (!canSend) return
+    if (!canSend || !activeId) return
 
+    const sessionId = activeId
     const isFirst   = messages.length === 0
-    const sessionId = activeSession.id
-
-    const displayContent = [
-      text,
-      attached ? `📎 ${attached.name}` : '',
-    ].filter(Boolean).join('\n\n')
-
-    const chatContent = text + (attached ? `\n\n[File: ${attached.name}]\n\`\`\`\n${attached.content}\n\`\`\`` : '')
-
-    /* Project shared context */
-    const proj = activeSession?.projectId
+    const proj      = activeSession?.projectId
       ? projects.find(p => p.id === activeSession.projectId)
       : null
 
-    updateSession(sessionId, s => ({
-      ...s,
-      title: isFirst ? (text || attached?.name || 'New Chat').slice(0, 44) : s.title,
-      messages: [...s.messages, { role: 'user', content: displayContent }],
-    }))
+    const displayContent = [text, attached ? `📎 ${attached.name}` : ''].filter(Boolean).join('\n\n')
+    const chatContent    = text + (attached ? `\n\n[File: ${attached.name}]\n\`\`\`\n${attached.content}\n\`\`\`` : '')
 
+    // Optimistic user message
+    setMessages(prev => [...prev, { role: 'user', content: displayContent }])
     setInput(''); setAttached(null)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setLoading(true)
 
+    // Auto-title on first message
+    if (isFirst) {
+      const newTitle = (text || attached?.name || 'New Chat').slice(0, 44)
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title: newTitle } : s))
+      api.renameSession(sessionId, newTitle).catch(() => {})
+    }
+
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat:            chatContent,
-          session_id:      sessionId,
-          model:           chatModel,
-          project_context: proj?.sharedContext || null,
-        }),
+      const res = await api.chat({
+        chat:            chatContent,
+        session_id:      sessionId,
+        model:           chatModel,
+        project_context: proj?.sharedContext || null,
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data = await res.json()
-      updateSession(sessionId, s => ({
-        ...s,
-        messages: [...s.messages, { role: 'assistant', content: data.reply }],
-      }))
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
     } catch (err) {
-      updateSession(sessionId, s => ({
-        ...s,
-        messages: [...s.messages, { role: 'assistant', content: `⚠ ${err.message}` }],
-      }))
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠ ${err.message}` }])
     } finally {
       setLoading(false)
     }
@@ -412,15 +449,29 @@ export default function App() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
+  /* ── If not logged in, show auth page ──────────────── */
+  if (!user) return <AuthPage onAuth={handleAuth} />
+
+  /* ── Full-screen loader while data loads ────────────── */
+  if (dataLoading) {
+    return (
+      <div className="app-init-loading">
+        <div className="init-spinner" />
+        <p>Loading your chats…</p>
+      </div>
+    )
+  }
+
   /* ── Render ────────────────────────────────────────── */
   return (
     <div className="app-layout">
       <Sidebar
         sessions={sessions}
         projects={projects}
-        activeId={activeSession?.id}
+        activeId={activeId}
         open={sidebarOpen}
         theme={theme}
+        user={user}
         onNewChat={handleNewChat}
         onNewProjectChat={handleNewProjectChat}
         onSelect={handleSelect}
@@ -430,6 +481,7 @@ export default function App() {
         onThemeChange={setTheme}
         onSettings={() => setSettingsOpen(true)}
         onHelp={() => setHelpOpen(true)}
+        onLogout={handleLogout}
         onCreateProject={() => setProjectModalData({ mode: 'create' })}
         onEditProject={handleEditProject}
         onDeleteProject={handleDeleteProject}
@@ -445,7 +497,7 @@ export default function App() {
                 <IcoMenu />
               </button>
             )}
-            <span className="chat-header-title">{activeSession?.title ?? 'New Chat'}</span>
+            <span className="chat-header-title">{activeSession?.title ?? 'AI Chat'}</span>
             {(() => {
               const proj = activeSession?.projectId ? projects.find(p => p.id === activeSession.projectId) : null
               return proj ? (
@@ -456,9 +508,7 @@ export default function App() {
               ) : null
             })()}
           </div>
-
           <div className="chat-header-right">
-            {/* Download dropdown */}
             <div className="download-menu" ref={downloadBtnRef}>
               <button
                 className="icon-btn"
@@ -470,18 +520,10 @@ export default function App() {
               </button>
               {downloadOpen && (
                 <div className="download-dropdown">
-                  <button className="dl-item" onClick={handleDownloadPDF}>
-                    <IcoDlPDF /> <span><strong>PDF</strong> · print / save as PDF</span>
-                  </button>
-                  <button className="dl-item" onClick={handleDownloadDoc}>
-                    <IcoDlDoc /> <span><strong>Word</strong> · .doc file</span>
-                  </button>
-                  <button className="dl-item" onClick={handleDownloadHTML}>
-                    <IcoDlHTML /> <span><strong>HTML</strong> · styled web page</span>
-                  </button>
-                  <button className="dl-item" onClick={handleDownloadMD}>
-                    <IcoDlMD /> <span><strong>Markdown</strong> · plain text</span>
-                  </button>
+                  <button className="dl-item" onClick={handleDownloadPDF}><IcoDlPDF /><span><strong>PDF</strong> · print / save as PDF</span></button>
+                  <button className="dl-item" onClick={handleDownloadDoc}><IcoDlDoc /><span><strong>Word</strong> · .doc file</span></button>
+                  <button className="dl-item" onClick={handleDownloadHTML}><IcoDlHTML /><span><strong>HTML</strong> · styled web page</span></button>
+                  <button className="dl-item" onClick={handleDownloadMD}><IcoDlMD /><span><strong>Markdown</strong> · plain text</span></button>
                 </div>
               )}
             </div>
@@ -490,9 +532,17 @@ export default function App() {
 
         {/* Messages */}
         <main className="chat-body" ref={chatBodyRef}>
-          {isEmpty && <BubbleCursor containerRef={chatBodyRef} />}
+          {isEmpty && !activeId && <BubbleCursor containerRef={chatBodyRef} />}
 
-          {isEmpty && (
+          {!activeId && isEmpty && (
+            <div className="chat-empty">
+              <div className="empty-orb"><IcoSparkle /></div>
+              <p className="empty-heading">Welcome back, {user.username}!</p>
+              <p className="empty-sub">Click <strong>New Chat</strong> to start a conversation.</p>
+            </div>
+          )}
+
+          {activeId && isEmpty && !messagesLoading && (
             <div className="chat-empty">
               <div className="empty-orb"><IcoSparkle /></div>
               <p className="empty-heading">How can I help you today?</p>
@@ -504,24 +554,26 @@ export default function App() {
                   { label: 'Summarize a topic',   fill: 'Summarize ' },
                   { label: 'Help me debug',       fill: 'Help me debug this:\n\n' },
                 ].map(({ label, fill }) => (
-                  <button
-                    key={label}
-                    className="empty-chip"
+                  <button key={label} className="empty-chip"
                     onClick={() => {
                       setInput(fill)
                       setTimeout(() => {
                         const ta = textareaRef.current
                         if (!ta) return
-                        ta.focus()
-                        ta.setSelectionRange(fill.length, fill.length)
-                        autoResize()
+                        ta.focus(); ta.setSelectionRange(fill.length, fill.length); autoResize()
                       }, 0)
-                    }}
-                  >
+                    }}>
                     {label}
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {messagesLoading && (
+            <div className="messages-loading">
+              <div className="msg-load-spinner" />
+              <p>Loading messages…</p>
             </div>
           )}
 
@@ -545,53 +597,51 @@ export default function App() {
           <div ref={bottomRef} />
         </main>
 
-        {/* Footer */}
-        <footer className="chat-footer">
-          {attached && (
-            <div className="chips-row">
-              <div className="file-chip">
-                <IcoFile />
-                <span className="chip-name">{attached.name}</span>
-                <button className="chip-remove" onClick={() => setAttached(null)}><IcoX size={11} /></button>
+        {/* Footer — only show when a session is active */}
+        {activeId && (
+          <footer className="chat-footer">
+            {attached && (
+              <div className="chips-row">
+                <div className="file-chip">
+                  <IcoFile />
+                  <span className="chip-name">{attached.name}</span>
+                  <button className="chip-remove" onClick={() => setAttached(null)}><IcoX size={11} /></button>
+                </div>
               </div>
+            )}
+            <div className="input-bar">
+              <button className="tool-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">
+                <IcoPaperclip />
+              </button>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => { setInput(e.target.value); autoResize() }}
+                onKeyDown={handleKeyDown}
+                placeholder="Message AI…"
+                disabled={loading || messagesLoading}
+                rows={1}
+                autoFocus
+              />
+              <button
+                className={`send-btn ${loading ? 'loading' : ''}`}
+                onClick={sendMessage}
+                disabled={!canSend}
+                title="Send (Enter)"
+              >
+                {loading ? <IcoSpinner /> : <IcoSend />}
+              </button>
             </div>
-          )}
-
-          <div className="input-bar">
-            <button className="tool-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">
-              <IcoPaperclip />
-            </button>
-
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={e => { setInput(e.target.value); autoResize() }}
-              onKeyDown={handleKeyDown}
-              placeholder="Message AI…"
-              disabled={loading}
-              rows={1}
-              autoFocus
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.css,.xml,.yaml,.yml,.sh,.toml,.env"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
             />
-
-            <button
-              className={`send-btn ${loading ? 'loading' : ''}`}
-              onClick={sendMessage}
-              disabled={!canSend}
-              title="Send (Enter)"
-            >
-              {loading ? <IcoSpinner /> : <IcoSend />}
-            </button>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.css,.xml,.yaml,.yml,.sh,.toml,.env"
-            onChange={handleFileSelect}
-            style={{ display: 'none' }}
-          />
-          <p className="input-hint">Enter to send · Shift+Enter for new line</p>
-        </footer>
+            <p className="input-hint">Enter to send · Shift+Enter for new line</p>
+          </footer>
+        )}
       </div>
 
       {/* Modals */}
@@ -600,24 +650,26 @@ export default function App() {
           theme={theme}
           chatModel={chatModel}
           onThemeChange={setTheme}
-          onModelChange={m => { setChatModel(m); showToast(`Model set to ${m}`) }}
+          onModelChange={m => { setChatModel(m); localStorage.setItem('chat-model', m); showToast(`Model set to ${m}`) }}
           onClearAll={handleClearAll}
           onClose={() => setSettingsOpen(false)}
         />
       )}
-      {helpOpen && (
-        <HelpModal onClose={() => setHelpOpen(false)} />
-      )}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
       {projectModalData && (
         <ProjectModal
           project={projectModalData.mode === 'edit' ? projectModalData.project : null}
-          onSave={data => {
+          onSave={async data => {
             if (projectModalData.mode === 'create') {
-              handleCreateProject(data)
+              await handleCreateProject(data)
             } else {
-              setProjects(prev => prev.map(p =>
-                p.id === projectModalData.project.id ? { ...p, ...data } : p
-              ))
+              const id = projectModalData.project.id
+              setProjects(prev => prev.map(p => p.id === id ? { ...p, ...data } : p))
+              await api.updateProject(id, {
+                name:           data.name,
+                color:          data.color,
+                shared_context: data.sharedContext || '',
+              })
               showToast('Project updated')
             }
           }}
@@ -642,8 +694,7 @@ function IcoSend()    { return <svg width="15" height="15" viewBox="0 0 24 24" f
 function IcoSpinner() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="spin-icon"><path d="M12 2a10 10 0 0 1 0 20" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> }
 function IcoFile()    { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg> }
 function IcoX({ size = 14 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
-/* Download format icons */
-function IcoDlPDF()  { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> }
+function IcoDlPDF()  { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> }
 function IcoDlDoc()  { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> }
 function IcoDlHTML() { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> }
 function IcoDlMD()   { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h10M4 18h6"/></svg> }
