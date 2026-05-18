@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 230 215" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="25" y1="195" x2="175" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00c6ff"/>
+      <stop offset="1" stop-color="#8b00ff"/>
+    </linearGradient>
+    <linearGradient id="cg" x1="148" y1="160" x2="220" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6600dd"/>
+      <stop offset="1" stop-color="#aa33ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- C-shaped chat-bubble arc: center(98,108) r=70, opening to the right -->
+  <path d="M148 59 A70 70 0 1 0 148 157"
+        stroke="url(#bg)" stroke-width="27" stroke-linecap="round"/>
+
+  <!-- Bubble tail (bottom-left) -->
+  <path d="M30 155 L12 192 L58 172Z" fill="url(#bg)"/>
+
+  <!-- Three dots inside the bubble -->
+  <circle cx="70"  cy="108" r="9.5" fill="#1ab3ff"/>
+  <circle cx="98"  cy="108" r="9.5" fill="#1ab3ff"/>
+  <circle cx="126" cy="108" r="9.5" fill="#1ab3ff"/>
+
+  <!-- Circuit board traces -->
+  <!-- Top branch: right then up -->
+  <polyline points="150,72 186,72 186,50"
+            stroke="url(#cg)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="186" cy="43" r="7" stroke="#9900ff" stroke-width="3.5"/>
+
+  <!-- Mid-upper branch: horizontal with node -->
+  <polyline points="150,92 200,92"
+            stroke="url(#cg)" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- connector between top and mid -->
+  <polyline points="173,72 173,92"
+            stroke="url(#cg)" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="207" cy="92" r="7" stroke="#9900ff" stroke-width="3.5"/>
+
+  <!-- Bottom branch: right then down -->
+  <polyline points="150,140 186,140 186,164"
+            stroke="url(#cg)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="186" cy="171" r="7" stroke="#9900ff" stroke-width="3.5"/>
+
+  <!-- Small bottom stub -->
+  <polyline points="168,140 168,152"
+            stroke="url(#cg)" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="168" cy="158" r="5" fill="#8800dd"/>
+
+  <!-- Sparkles (upper-right) -->
+  <!-- Large 4-pointed star -->
+  <path d="M196 30 L198.8 40 L209 42.5 L198.8 45 L196 55 L193.2 45 L183 42.5 L193.2 40Z"
+        fill="#7700ee"/>
+  <!-- Small 4-pointed star -->
+  <path d="M216 10 L217.8 16.5 L224 18.5 L217.8 20.5 L216 27 L214.2 20.5 L208 18.5 L214.2 16.5Z"
+        fill="#5533cc"/>
+</svg>

@@ -14,7 +14,8 @@ const MODEL_GROUPS = [
   {
     label: 'Qwen',
     models: [
-      { id: 'qwen2.5',          label: 'Qwen 2.5'       },
+      { id: 'qwen2.5:latest',   label: 'Qwen 2.5 (Latest)' },
+      { id: 'qwen2.5:1.5b',     label: 'Qwen 2.5 (1.5B)'   },
       { id: 'qwen2.5-coder',    label: 'Qwen 2.5 Coder', badge: 'code' },
       { id: 'qwen2',            label: 'Qwen 2'          },
       { id: 'qwen',             label: 'Qwen'            },
@@ -240,7 +241,7 @@ export default function SettingsModal({
             </div>
 
             <p className="setting-hint">
-              The model must be pulled in Ollama first: <code>ollama pull {model || 'llama3'}</code>.
+              The model must be pulled in Ollama first: <code>ollama pull {model || 'qwen2.5:1.5b'}</code>.
               Vision-tagged models support the camera feature.
             </p>
           </div>

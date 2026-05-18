@@ -1,4 +1,9 @@
-const BASE = '/api'
+// In production (Render), set VITE_API_URL to your backend URL, e.g.:
+// https://chat-backend.onrender.com
+// Leave unset for local dev (Vite proxy handles /api → localhost:8000)
+const BASE = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, '')  // strip trailing slash
+  : '/api'
 
 function getToken() {
   return localStorage.getItem('chat-token')

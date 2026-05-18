@@ -1,16 +1,34 @@
+import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat     import router as chat_router
 from app.api.auth     import router as auth_router
 from app.api.sessions import router as sessions_router
 from app.api.projects import router as projects_router
-from app.db.memory    import ping
+from app.db.memory    import ping, close
 
-app = FastAPI(title="AI Chat API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if not ping():
+        raise RuntimeError(
+            "Cannot connect to MongoDB. "
+            "Check MONGODB_URI in your .env file."
+        )
+    yield
+    close()
+
+
+app = FastAPI(title="AI Chat API", lifespan=lifespan)
+
+# CORS — allow origins from env var (comma-separated) or default to all
+_raw_origins = os.getenv("CORS_ORIGINS", "*")
+_origins = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

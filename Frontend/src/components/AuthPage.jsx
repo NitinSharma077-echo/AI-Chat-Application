@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
+import logo from '../assets/logo.svg'
 
 export default function AuthPage({ onAuth }) {
   const [mode,     setMode]     = useState('login')   // 'login' | 'register'
@@ -53,7 +54,7 @@ export default function AuthPage({ onAuth }) {
         {/* Brand */}
         <div className="auth-brand">
           <div className="auth-brand-icon">
-            <IcoSparkle />
+            <img src={logo} alt="AI Chat" className="auth-brand-logo" />
           </div>
           <h1 className="auth-brand-name">AI Chat</h1>
           <p className="auth-brand-sub">Your private local AI assistant</p>

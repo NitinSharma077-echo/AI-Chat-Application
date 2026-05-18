@@ -101,7 +101,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [attached,    setAttached]    = useState(null)
   const [toast,       setToast]       = useState(null)
-  const [chatModel,   setChatModel]   = useState(() => localStorage.getItem('chat-model') || 'llama3')
+  const [chatModel,   setChatModel]   = useState(() => {
+    let m = localStorage.getItem('chat-model')
+    return (!m || m === 'llama3') ? 'qwen2.5:1.5b' : m
+  })
 
   const [settingsOpen,     setSettingsOpen]     = useState(false)
   const [helpOpen,         setHelpOpen]         = useState(false)

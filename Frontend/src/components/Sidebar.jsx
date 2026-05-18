@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import logo from '../assets/logo.svg'
 
 /* ══════════════════════════════════════════════════════
    SESSION ITEM  — defined OUTSIDE Sidebar so React
@@ -135,7 +136,7 @@ export default function Sidebar({
       {/* Brand header */}
       <div className="sb-header">
         <div className="sb-brand">
-          <div className="sb-brand-icon"><IcoSparkle /></div>
+          <div className="sb-brand-icon"><img src={logo} alt="AI Chat" className="sb-brand-logo" /></div>
           <span className="sb-brand-name">AI Chat</span>
         </div>
         <button className="sb-icon-btn" onClick={onToggle} title="Collapse sidebar">
