@@ -3,16 +3,15 @@ services:
   - type: web
     name: chat-backend
     runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: MONGODB_URI
-        sync: false          # set this in Render dashboard
+        sync: false          # set in Render dashboard
       - key: DB_NAME
         value: ChatApp1
       - key: JWT_SECRET
-        sync: false          # set this in Render dashboard
+        sync: false          # set in Render dashboard
       - key: JWT_ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
@@ -24,14 +23,13 @@ services:
       - key: MODEL_NAME
         value: qwen2.5:1.5b
       - key: CORS_ORIGINS
-        sync: false          # set to your frontend URL, e.g. https://chat-frontend.onrender.com
+        sync: false          # set to your frontend URL
 
   # ── Frontend (React/Vite static site) ─────────────────────────
   - type: static
     name: chat-frontend
-    rootDir: Frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
+    buildCommand: cd Frontend && npm install && npm run build
+    staticPublishPath: ./Frontend/dist
     envVars:
       - key: VITE_API_URL
         sync: false          # set to your backend URL, e.g. https://chat-backend.onrender.com
