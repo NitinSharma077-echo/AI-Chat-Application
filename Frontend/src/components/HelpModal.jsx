@@ -109,10 +109,7 @@ export default function HelpModal({ onClose }) {
 
           <section className="help-section">
             <h3>Backend Health</h3>
-            <p>Check if everything is running at:</p>
-            <div className="help-code">
-              <code>http://localhost:8000/health</code>
-            </div>
+            <p>Check if the backend is running by visiting <code>/health</code> on your backend URL.</p>
           </section>
 
         </div>

@@ -10,10 +10,12 @@ _users_col    = _db["users"]
 _sessions_col = _db["sessions"]
 _projects_col = _db["projects"]
 
-# Indexes (idempotent — safe to run on every startup)
-_users_col.create_index("email", unique=True)
-_sessions_col.create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
-_projects_col.create_index([("user_id", ASCENDING), ("created_at", ASCENDING)])
+
+def ensure_indexes():
+    """Create indexes after confirming MongoDB is reachable. Called from lifespan."""
+    _users_col.create_index("email", unique=True)
+    _sessions_col.create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
+    _projects_col.create_index([("user_id", ASCENDING), ("created_at", ASCENDING)])
 
 
 def ping() -> bool:

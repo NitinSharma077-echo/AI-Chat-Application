@@ -299,7 +299,7 @@ export default function SettingsModal({
         {/* Footer */}
         <div className="modal-footer">
           <button className="modal-btn secondary" onClick={handleClose}>Cancel</button>
-          <button className="modal-btn primary" onClick={handleSave} disabled={!dirty || !model.trim()}>
+          <button className="modal-btn primary" onClick={handleSave} disabled={!dirty}>
             Save Changes
           </button>
         </div>

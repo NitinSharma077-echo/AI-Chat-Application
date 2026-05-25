@@ -6,7 +6,7 @@ from app.api.chat     import router as chat_router
 from app.api.auth     import router as auth_router
 from app.api.sessions import router as sessions_router
 from app.api.projects import router as projects_router
-from app.db.memory    import ping, close
+from app.db.memory    import ping, close, ensure_indexes
 
 
 @asynccontextmanager
@@ -16,6 +16,7 @@ async def lifespan(app: FastAPI):
             "Cannot connect to MongoDB. "
             "Check MONGODB_URI in your .env file."
         )
+    ensure_indexes()
     yield
     close()
 
