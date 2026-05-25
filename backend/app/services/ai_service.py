@@ -1,9 +1,12 @@
 import requests
-from app.core.config import OLLAMA_URL, MODEL_NAME, HF_TOKEN
+from app.core.config import OLLAMA_URL, MODEL_NAME, HF_TOKEN, GROQ_API_KEY
 from app.db.memory import get_history
 
+_GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
+_GROQ_MODEL = "llama-3.1-8b-instant"
+
 _HF_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-_HF_URL   = f"https://api-inference.huggingface.co/models/{_HF_MODEL}/v1/chat/completions"
+_HF_URL   = "https://router.huggingface.co/hf-inference/v1/chat/completions"
 
 
 def generate(
@@ -15,22 +18,49 @@ def generate(
 ) -> str:
     history = get_history(session_id)
 
+    if GROQ_API_KEY:
+        return _groq_generate(history, project_context)
     if HF_TOKEN:
         return _hf_generate(history, project_context)
     return _ollama_generate(history, images, model, project_context)
 
 
-def _hf_generate(history: list, project_context: str | None) -> str:
+def _build_messages(history: list, project_context: str | None) -> list:
     messages = []
     if project_context and project_context.strip():
         messages.append({"role": "system", "content": project_context.strip()})
     messages.extend(history)
+    return messages
 
+
+def _groq_generate(history: list, project_context: str | None) -> str:
+    try:
+        res = requests.post(
+            _GROQ_URL,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            json={
+                "model": _GROQ_MODEL,
+                "messages": _build_messages(history, project_context),
+                "max_tokens": 1024,
+            },
+            timeout=60,
+        )
+        res.raise_for_status()
+        return res.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+def _hf_generate(history: list, project_context: str | None) -> str:
     try:
         res = requests.post(
             _HF_URL,
             headers={"Authorization": f"Bearer {HF_TOKEN}"},
-            json={"model": _HF_MODEL, "messages": messages, "max_tokens": 512},
+            json={
+                "model": _HF_MODEL,
+                "messages": _build_messages(history, project_context),
+                "max_tokens": 512,
+            },
             timeout=60,
         )
         res.raise_for_status()
