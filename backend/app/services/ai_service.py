@@ -1,8 +1,11 @@
 import requests
-from app.core.config import OLLAMA_URL, MODEL_NAME, HF_TOKEN, GROQ_API_KEY
+from app.core.config import OLLAMA_URL, MODEL_NAME, HF_TOKEN, GROQ_API_KEY, OPENAI_API_KEY
 from app.db.memory import get_history
 
-_GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
+_OPENAI_URL   = "https://api.openai.com/v1/chat/completions"
+_OPENAI_MODEL = "gpt-4o-mini"
+
+_GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
 _GROQ_MODEL = "llama-3.1-8b-instant"
 
 _HF_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -18,6 +21,8 @@ def generate(
 ) -> str:
     history = get_history(session_id)
 
+    if OPENAI_API_KEY:
+        return _openai_generate(history, project_context)
     if GROQ_API_KEY:
         return _groq_generate(history, project_context)
     if HF_TOKEN:
@@ -31,6 +36,24 @@ def _build_messages(history: list, project_context: str | None) -> list:
         messages.append({"role": "system", "content": project_context.strip()})
     messages.extend(history)
     return messages
+
+
+def _openai_generate(history: list, project_context: str | None) -> str:
+    try:
+        res = requests.post(
+            _OPENAI_URL,
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            json={
+                "model": _OPENAI_MODEL,
+                "messages": _build_messages(history, project_context),
+                "max_tokens": 1024,
+            },
+            timeout=60,
+        )
+        res.raise_for_status()
+        return res.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 
 def _groq_generate(history: list, project_context: str | None) -> str:
